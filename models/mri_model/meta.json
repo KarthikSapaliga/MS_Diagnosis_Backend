@@ -1,0 +1,10 @@
+{
+  "label_map": {
+    "NORMAL": 0,
+    "MS": 1
+  },
+  "img_size": 224,
+  "num_slices": 32,
+  "slice_spread": 0.6,
+  "paths_test": []
+}
