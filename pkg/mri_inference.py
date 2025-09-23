@@ -149,4 +149,4 @@ def predict_folder(folder, threshold=0.5):
     return results
 
 # ---------------- USAGE ---------------- #
-predict_folder("./test/mri", threshold=0.5)
+# predict_folder("./test/mri", threshold=0.5)
