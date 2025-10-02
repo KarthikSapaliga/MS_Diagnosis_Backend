@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 
@@ -9,15 +10,36 @@ UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {'nii', 'nii.gz', 'png', 'jpg', 'jpeg'}
 
 app = Flask(__name__)
+
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    }
+})
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return (
+        '.' in filename and
+        (filename.lower().endswith(".nii") or filename.lower().endswith(".nii.gz") 
+        or filename.rsplit('.', 1)[1].lower() in {"png", "jpg", "jpeg"})
+    )
 
 @app.route("/predict/mri", methods=["POST"])
 def predict_mri():
+    os.system('cls')
+    print(">> predict mri")
+    print(">> Received files:", request.files.keys())
+    # print(">> Filename:", file.filename)
+
     if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -37,6 +59,10 @@ def predict_mri():
 
 @app.route("/predict/oct", methods=["POST"])
 def predict_oct():
+    print(">> predict oct")
+    print(">> Received files:", request.files.keys())
+    # print(">> Filename:", file.filename)
+
     mri_prob = float(request.form.get("mri_prob", 0))
     if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -59,6 +85,7 @@ def predict_oct():
         final_prediction = "MS" if prob >= 0.5 else "NORMAL"
 
     response = {
+        "mri_prob": mri_prob,
         "oct_prob": prob,
         "oct_pred": "MS" if pred == 1 else "NORMAL",
         "final_prediction": final_prediction,
@@ -67,6 +94,10 @@ def predict_oct():
 
     return jsonify(response)
 
+
+@app.route("/", methods=['GET'])
+def root_path():
+    return jsonify({"status": "server is running"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
