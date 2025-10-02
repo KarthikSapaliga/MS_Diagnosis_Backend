@@ -107,6 +107,8 @@ def load_models(load_dir):
     with open(xgb_path, "rb") as f:
         xgb_model = pickle.load(f)
 
+    xgb_model.set_params(tree_method="hist", predictor="cpu_predictor", device="cpu")
+
     cat_model = CatBoostClassifier()
     cat_model.load_model(cat_path)
 
