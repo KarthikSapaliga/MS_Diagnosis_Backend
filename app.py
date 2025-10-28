@@ -77,13 +77,11 @@ def predict_oct():
 
     prob, pred = predict_image(file_path)
 
-    if mri_prob >= 0.2:
-        sum_prob = (mri_prob + prob)
-        final_prob = (mri_prob/sum_prob)*0.4 + (prob/sum_prob)*0.6
-        final_prediction = "MS" if final_prob >= 0.5 else "NORMAL"
-    else:
-        final_prob = prob
-        final_prediction = "MS" if prob >= 0.5 else "NORMAL"
+
+    sum_prob = (mri_prob + prob)
+    final_prob = (mri_prob/sum_prob)*0.4 + (prob/sum_prob)*0.6
+    final_prediction = "MS" if final_prob >= 0.5 else "NORMAL"
+    
 
     response = {
         "mri_prob": mri_prob,
