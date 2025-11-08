@@ -29,7 +29,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def allowed_file(filename):
     return (
         '.' in filename and
-        (filename.lower().endswith(".nii") or filename.lower().endswith(".nii.gz") 
+        (filename.lower().endswith(".nii") or filename.lower().endswith(".nii.gz")
         or filename.rsplit('.', 1)[1].lower() in {"png", "jpg", "jpeg"})
     )
 
@@ -75,17 +75,18 @@ def predict_oct():
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(file_path)
 
-    prob, pred = predict_image(file_path)
+    oct_prob, pred = predict_image(file_path)
 
-
-    sum_prob = (mri_prob + prob)
-    final_prob = (mri_prob/sum_prob)*0.4 + (prob/sum_prob)*0.6
-    final_prediction = "MS" if final_prob >= 0.5 else "NORMAL"
-    
+    if 0.2 <= mri_prob <= 0.5:
+        final_prob = oct_prob
+        final_prediction = "MS" if pred == 1 else "NORMAL"
+    else:
+        final_prob = mri_prob
+        final_prediction = "MS" if mri_prob >= 0.5 else "NORMAL"
 
     response = {
         "mri_prob": mri_prob,
-        "oct_prob": prob,
+        "oct_prob": oct_prob,
         "oct_pred": "MS" if pred == 1 else "NORMAL",
         "final_prediction": final_prediction,
         "combined_prob": final_prob
