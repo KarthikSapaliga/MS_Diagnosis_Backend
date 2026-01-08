@@ -1,21 +1,25 @@
-import os, glob, pickle, json
-import numpy as np
-import nibabel as nib
+import glob
+import json
+import os
+import pickle
 
+import nibabel as nib
+import numpy as np
 import torch
 import torch.nn as nn
-from torchvision import transforms, models
-from torchvision.models.feature_extraction import create_feature_extractor
 from catboost import CatBoostClassifier
+from torchvision import models, transforms
+from torchvision.models.feature_extraction import create_feature_extractor
 
 # ---------------- CONFIG ---------------- #
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Image preprocessing
 IMG_SIZE = 224
 NUM_SLICES = 32
 SLICE_SPREAD = 0.6
 MIN_NONZERO_FRAC = 0.002
+
 
 # ---------------- UTILITIES ---------------- #
 def load_nifti(path):
@@ -29,11 +33,12 @@ def load_nifti(path):
     arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-8)
     return arr
 
+
 def pick_slices(volume, num_slices=32, spread=0.6):
     Z = volume.shape[-1]
-    z0 = int((1.0 - spread)/2 * Z)
-    z1 = int((1.0 + spread)/2 * Z)
-    z_idx = np.linspace(z0, max(z0+1, z1-1), num_slices, dtype=int)
+    z0 = int((1.0 - spread) / 2 * Z)
+    z1 = int((1.0 + spread) / 2 * Z)
+    z_idx = np.linspace(z0, max(z0 + 1, z1 - 1), num_slices, dtype=int)
 
     kept = []
     for z in z_idx:
@@ -41,24 +46,34 @@ def pick_slices(volume, num_slices=32, spread=0.6):
         if (sl > 0).mean() >= MIN_NONZERO_FRAC:
             kept.append(z)
     if len(kept) == 0:
-        kept = [Z//2]
+        kept = [Z // 2]
     return kept
 
+
 # ---------------- FEATURE EXTRACTORS ---------------- #
-resize = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
-])
+resize = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    ]
+)
 
 # SWIN Transformer
-swin = models.swin_v2_t(weights='DEFAULT')
-swin_feat = create_feature_extractor(swin, return_nodes={'flatten': 'feat'}).to(device).eval()
+swin = models.swin_v2_t(weights="DEFAULT")
+swin_feat = (
+    create_feature_extractor(swin, return_nodes={"flatten": "feat"}).to(device).eval()
+)
 
 # MobileNetV3
-mnet = models.mobilenet_v3_large(weights='DEFAULT')
-mnet_feat = create_feature_extractor(mnet, return_nodes={'features.15': 'feat_last'}).to(device).eval()
+mnet = models.mobilenet_v3_large(weights="DEFAULT")
+mnet_feat = (
+    create_feature_extractor(mnet, return_nodes={"features.15": "feat_last"})
+    .to(device)
+    .eval()
+)
 
-gap = nn.AdaptiveAvgPool2d((1,1)).to(device)
+gap = nn.AdaptiveAvgPool2d((1, 1)).to(device)
+
 
 @torch.no_grad()
 def extract_volume_features(vol_path):
@@ -69,16 +84,16 @@ def extract_volume_features(vol_path):
     for z in z_list:
         sl = vol[..., z]
         t = resize(sl)  # (1,224,224)
-        t = t.repeat(3,1,1).unsqueeze(0).to(device)  # (1,3,224,224)
+        t = t.repeat(3, 1, 1).unsqueeze(0).to(device)  # (1,3,224,224)
 
         # SWIN features
-        out_s = swin_feat(t)['feat']
+        out_s = swin_feat(t)["feat"]
         if out_s.ndim > 2:
             out_s = torch.flatten(out_s, 1)
         swin_feats.append(out_s.squeeze(0).cpu())
 
         # MobileNet features
-        fm = mnet_feat(t)['feat_last']
+        fm = mnet_feat(t)["feat_last"]
         pooled = gap(fm).view(1, -1)
         mnet_feats.append(pooled.squeeze(0).cpu())
 
@@ -86,6 +101,7 @@ def extract_volume_features(vol_path):
     mnet_vec = torch.stack(mnet_feats, 0).mean(0)
     fused = torch.cat([swin_vec, mnet_vec], dim=0).numpy()
     return fused
+
 
 # ---------------- LOAD MODELS ---------------- #
 def load_models(load_dir):
@@ -117,23 +133,26 @@ def load_models(load_dir):
 
     return xgb_model, cat_model, rf_model, meta
 
+
 SAVE_DIR = "./models/mri_model"
 xgb, cat, rf, meta = load_models(SAVE_DIR)
 
+
 # ---------------- PREDICTION ---------------- #
 def predict_volume(path):
-    f = extract_volume_features(path).reshape(1,-1)
+    f = extract_volume_features(path).reshape(1, -1)
 
-    p_xgb = xgb.predict_proba(f)[:,1].reshape(-1,1)
-    p_cat = cat.predict_proba(f)[:,1].reshape(-1,1)
+    p_xgb = xgb.predict_proba(f)[:, 1].reshape(-1, 1)
+    p_cat = cat.predict_proba(f)[:, 1].reshape(-1, 1)
 
     f_meta = np.concatenate([f, p_xgb, p_cat], axis=1)
-    p = rf.predict_proba(f_meta)[:,1][0]
+    p = rf.predict_proba(f_meta)[:, 1][0]
 
     label = "MS" if p >= 0.5 else "NORMAL"
     fname = os.path.basename(path)
     print(f"{fname:25s} -> Probability (MS) = {p:.4f} | Predicted: {label}")
     return fname, label, float(p)
+
 
 def predict_folder(folder, threshold=0.5):
     if not os.path.exists(folder):
@@ -149,6 +168,7 @@ def predict_folder(folder, threshold=0.5):
         fname, label, prob = predict_volume(f)
         results.append((fname, label, prob))
     return results
+
 
 # ---------------- USAGE ---------------- #
 # predict_folder("./test/mri", threshold=0.5)
