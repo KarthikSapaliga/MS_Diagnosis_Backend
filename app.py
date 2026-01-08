@@ -5,6 +5,7 @@ import os
 
 from pkg.mri_inference import predict_volume
 from pkg.oct_inference import predict_image
+from pkg.oct_validation import validate_oct
 
 UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {'nii', 'nii.gz', 'png', 'jpg', 'jpeg'}
@@ -75,6 +76,27 @@ def predict_oct():
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(file_path)
 
+    # validation layer start
+    is_oct, score, threshold = validate_oct(file_path)
+
+    print("Image:", file_path)
+    print("Score:", round(score, 4))
+    print("Threshold:", round(threshold, 4))
+
+    if not is_oct:
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
+
+        return jsonify({
+            "is_oct": False,
+            "error": "Invalid OCT image",
+            "oct_score": round(score, 4),
+            "threshold": round(threshold, 4)
+        }), 400
+    # validation end
+
     oct_prob, pred = predict_image(file_path)
 
     if 0.2 <= mri_prob <= 0.5:
@@ -85,6 +107,7 @@ def predict_oct():
         final_prediction = "MS" if mri_prob >= 0.5 else "NORMAL"
 
     response = {
+        "is_oct": True,
         "mri_prob": mri_prob,
         "oct_prob": oct_prob,
         "oct_pred": "MS" if pred == 1 else "NORMAL",
